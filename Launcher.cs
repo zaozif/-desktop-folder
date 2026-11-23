@@ -637,15 +637,25 @@ namespace DesktopFolders
             if (DialogOpen || exiting)
                 return;
             var dialog = new SettingsDialog(Preferences, PanelImage, startup.Enabled, previewTaskbar: value =>
-                ApplyTaskbar(value), advancedTaskbar: TaskbarTuning.SupportsAdvanced, taskbarStatus: () => taskbar.Status);
+                ApplyTaskbar(value), advancedTaskbar: TaskbarTuning.SupportsAdvanced, taskbarStatus: () => taskbar.Status,
+                lastRestore: store.ReadExitReport);
             DialogOpen = true;
+            bool editLayout = false;
             try
             {
-                if (!dialog.Show())
-                    return;
+                bool accepted = dialog.Show();
                 WithFeedback(() =>
                 {
-                    store.SavePreferences(dialog.Value);
+                    var update = accepted ? dialog.Value : Preferences.Copy();
+                    if (dialog.WindowPosition.HasValue)
+                    {
+                        update.SettingsWindowX = dialog.WindowPosition.Value.X;
+                        update.SettingsWindowY = dialog.WindowPosition.Value.Y;
+                    }
+                    if (accepted || update.SettingsWindowX != Preferences.SettingsWindowX || update.SettingsWindowY != Preferences.SettingsWindowY)
+                        store.SavePreferences(update);
+                    if (!accepted)
+                        return;
                     ReloadPanelImage();
                     foreach (var tile in tiles)
                         tile.ApplyAppearance();
@@ -655,6 +665,7 @@ namespace DesktopFolders
                         startup.SetEnabled(dialog.StartWithWindows);
                     if (!ApplyTaskbar(Preferences))
                         Notify("Windows 暂时无法应用任务栏背景透明度。");
+                    editLayout = dialog.EditLayoutAfterSave;
                 });
             }
             finally
@@ -662,6 +673,7 @@ namespace DesktopFolders
                 ApplyTaskbar(Preferences);
                 DialogOpen = false;
             }
+            if (editLayout) OpenLayoutEditor();
         }
 
         private bool ApplyTaskbar(Preferences value)

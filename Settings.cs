@@ -70,6 +70,8 @@ namespace DesktopFolders
         public int TaskbarBrightness { get; set; }
         public int TaskbarIconsOpacity { get; set; }
         public bool TaskbarTopLine { get; set; }
+        public int? SettingsWindowX { get; set; }
+        public int? SettingsWindowY { get; set; }
 
         public Preferences()
         {
@@ -160,18 +162,24 @@ namespace DesktopFolders
         public Preferences Value { get { return global; } }
         public PanelAppearance FolderValue { get { return useGlobal ? null : draft; } }
         public bool StartWithWindows { get { return startup != null && startup.IsChecked == true; } }
+        public bool EditLayoutAfterSave { get; private set; }
+        public Drawing.Point? WindowPosition { get; private set; }
 
         public SettingsDialog(Preferences preferences, ImageSource image, bool startsWithWindows, Folder folder = null,
-            Action<Preferences> previewTaskbar = null, bool advancedTaskbar = false, Func<string> taskbarStatus = null)
+            Action<Preferences> previewTaskbar = null, bool advancedTaskbar = false, Func<string> taskbarStatus = null,
+            Func<string> lastRestore = null)
         {
             bool forFolder = folder != null;
             global = preferences.Copy();
             draft = forFolder ? (folder.Background ?? preferences).CopyBackground() : (PanelAppearance)global;
             previewImage = image;
             var settingsTitle = forFolder ? "文件夹展开背景" : Program.DisplayName + " 设置";
-            window = View.Overlay(settingsTitle, 542, forFolder ? 279 : advancedTaskbar ? 575 : 452);
+            window = View.Overlay(settingsTitle, 560, forFolder ? 279 : 420);
             if (!forFolder)
-                window.MaxHeight = SystemParameters.WorkArea.Height - 12;
+            {
+                window.Height = Math.Min(window.Height, SystemParameters.WorkArea.Height - 12);
+                window.Closing += (s, e) => WindowPosition = WindowsShell.Bounds(window).Location;
+            }
             var body = View.Rounded(View.Paper, 15);
             body.Margin = new Thickness(5);
             body.BorderThickness = new Thickness(1);
@@ -195,6 +203,8 @@ namespace DesktopFolders
             layout.Children.Add(title);
 
             var footer = new DockPanel();
+            var tabs = new TabControl { Margin = new Thickness(0, 0, 0, 8), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
+            var resetActions = new Action[3];
             if (forFolder)
             {
                 var reset = View.Button("使用全局背景", "使用全局背景", () =>
@@ -203,6 +213,14 @@ namespace DesktopFolders
                     window.DialogResult = true;
                 });
                 reset.Width = 100;
+                reset.Height = 34;
+                DockPanel.SetDock(reset, Dock.Left);
+                footer.Children.Add(reset);
+            }
+            else
+            {
+                var reset = View.Button("恢复默认", "恢复当前分页的默认值", () => resetActions[tabs.SelectedIndex]());
+                reset.Width = 90;
                 reset.Height = 34;
                 DockPanel.SetDock(reset, Dock.Left);
                 footer.Children.Add(reset);
@@ -220,9 +238,14 @@ namespace DesktopFolders
             DockPanel.SetDock(footer, Dock.Bottom);
             layout.Children.Add(footer);
 
+            var appearance = new DockPanel();
+            if (forFolder)
+                layout.Children.Add(appearance);
+            else
+                layout.Children.Add(tabs);
             var preview = new StackPanel { Width = 167, Margin = new Thickness(14, 0, 0, 0) };
             DockPanel.SetDock(preview, Dock.Right);
-            layout.Children.Add(preview);
+            appearance.Children.Add(preview);
             var previewHeading = View.Text("外观预览", 12, View.Secondary);
             previewHeading.Margin = new Thickness(0, 1, 0, 7);
             preview.Children.Add(previewHeading);
@@ -256,13 +279,11 @@ namespace DesktopFolders
             sampleLayout.Children.Add(samplePanel);
 
             var controls = new StackPanel();
-            if (forFolder)
-                layout.Children.Add(controls);
-            else
-                layout.Children.Add(new ScrollViewer { Content = controls, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+            appearance.Children.Add(controls);
+            Slider tileOpacity = null, panelOpacity;
             if (!forFolder)
-                controls.Children.Add(OpacityControl("桌面图标不透明度", global.TileOpacity, value => global.TileOpacity = value));
-            controls.Children.Add(OpacityControl("展开背景不透明度", draft.PanelOpacity, value => draft.PanelOpacity = value));
+                controls.Children.Add(OpacityControl("桌面图标不透明度", global.TileOpacity, value => global.TileOpacity = value, out tileOpacity));
+            controls.Children.Add(OpacityControl("展开背景不透明度", draft.PanelOpacity, value => draft.PanelOpacity = value, out panelOpacity));
             var label = View.Text("面板背景", 13, View.Ink);
             label.Margin = new Thickness(0, 5, 0, 2);
             controls.Children.Add(label);
@@ -289,13 +310,59 @@ namespace DesktopFolders
             controls.Children.Add(imageName);
             if (!forFolder)
             {
+                AddPage(tabs, "文件夹外观", appearance);
+                resetActions[0] = () =>
+                {
+                    var defaults = new Preferences();
+                    tileOpacity.Value = defaults.TileOpacity;
+                    panelOpacity.Value = defaults.PanelOpacity;
+                    draft.PanelColor = defaults.PanelColor;
+                    draft.PanelImage = null;
+                    previewImage = null;
+                    ResetImageEdits();
+                    UpdatePreview();
+                };
+
+                var recovery = new StackPanel();
                 startup = new CheckBox { Content = "开机自启动", IsChecked = startsWithWindows, Margin = new Thickness(0, 5, 0, 8) };
                 var restore = new CheckBox { Content = "退出时把收纳的快捷方式放回桌面", IsChecked = global.RestoreAtExit };
                 restore.Checked += (s, e) => global.RestoreAtExit = true;
                 restore.Unchecked += (s, e) => global.RestoreAtExit = false;
-                controls.Children.Add(startup);
-                controls.Children.Add(restore);
+                recovery.Children.Add(startup);
+                recovery.Children.Add(restore);
+                var layoutActions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 6) };
+                recovery.Children.Add(layoutActions);
+                var editLayout = View.Button("保存并调整布局…", "保存设置并调整原始布局", () =>
+                {
+                    EditLayoutAfterSave = true;
+                    window.DialogResult = true;
+                });
+                editLayout.Height = 34;
+                editLayout.MinWidth = 128;
+                layoutActions.Children.Add(editLayout);
+                if (lastRestore != null)
+                {
+                    var report = new TextBox
+                    {
+                        IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MaxHeight = 135, Visibility = Visibility.Collapsed,
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(8), BorderBrush = View.Edge
+                    };
+                    var showReport = View.Button("上次还原结果", "查看上次退出还原结果", () =>
+                    {
+                        try { report.Text = lastRestore(); }
+                        catch (IOException) { report.Text = "暂时读不到还原结果，请稍后再试。"; }
+                        catch (UnauthorizedAccessException) { report.Text = "Windows 未允许读取还原结果。"; }
+                        report.Visibility = Visibility.Visible;
+                    });
+                    showReport.Height = 34;
+                    showReport.MinWidth = 108;
+                    showReport.Margin = new Thickness(8, 0, 0, 0);
+                    layoutActions.Children.Add(showReport);
+                    recovery.Children.Add(report);
+                }
+                resetActions[2] = () => { startup.IsChecked = false; restore.IsChecked = true; };
 
+                var taskbarPage = new StackPanel();
                 var taskbar = new CheckBox
                 {
                     Content = advancedTaskbar ? "自定义任务栏外观" : "自定义任务栏背景透明度",
@@ -303,17 +370,19 @@ namespace DesktopFolders
                 };
                 var taskbarControls = new StackPanel { IsEnabled = global.CustomizeTaskbar };
                 Action previewAppearance = () => { if (previewTaskbar != null) previewTaskbar(global); };
+                Slider brightness = null, iconsOpacity = null, backgroundOpacity;
+                CheckBox topLine = null;
                 if (advancedTaskbar)
                     taskbarControls.Children.Add(OpacityControl("背景亮度", global.TaskbarBrightness, value =>
                     {
                         global.TaskbarBrightness = value;
                         previewAppearance();
-                    }, minimum: 0));
+                    }, out brightness, minimum: 0));
                 var opacity = OpacityControl(advancedTaskbar ? "背景不透明度" : "任务栏背景不透明度", global.TaskbarOpacity, value =>
                 {
                     global.TaskbarOpacity = value;
                     previewAppearance();
-                }, minimum: 0);
+                }, out backgroundOpacity, minimum: 0);
                 opacity.ToolTip = advancedTaskbar ? "0% 为全透明，100% 使用系统原有不透明度。" :
                     "0% 使用最低背景不透明度，100% 恢复系统外观。";
                 taskbarControls.Children.Add(opacity);
@@ -323,8 +392,8 @@ namespace DesktopFolders
                     {
                         global.TaskbarIconsOpacity = value;
                         previewAppearance();
-                    }, minimum: 0));
-                    var topLine = new CheckBox { Content = "显示任务栏顶部线", IsChecked = global.TaskbarTopLine };
+                    }, out iconsOpacity, minimum: 0));
+                    topLine = new CheckBox { Content = "显示任务栏顶部线", IsChecked = global.TaskbarTopLine };
                     RoutedEventHandler showLine = (s, e) =>
                     {
                         global.TaskbarTopLine = topLine.IsChecked == true;
@@ -341,15 +410,23 @@ namespace DesktopFolders
                 };
                 taskbar.Checked += changeTaskbar;
                 taskbar.Unchecked += changeTaskbar;
-                controls.Children.Add(taskbar);
-                controls.Children.Add(taskbarControls);
+                taskbarPage.Children.Add(taskbar);
+                taskbarPage.Children.Add(taskbarControls);
+                resetActions[1] = () =>
+                {
+                    taskbar.IsChecked = false;
+                    backgroundOpacity.Value = 100;
+                    if (brightness != null) brightness.Value = 100;
+                    if (iconsOpacity != null) iconsOpacity.Value = 100;
+                    if (topLine != null) topLine.IsChecked = true;
+                };
                 if (advancedTaskbar && taskbarStatus != null)
                 {
                     var status = View.Text("", 12, View.Secondary);
                     status.Visibility = Visibility.Collapsed;
                     status.TextWrapping = TextWrapping.Wrap;
                     status.Margin = new Thickness(0, 5, 0, 0);
-                    controls.Children.Add(status);
+                    taskbarPage.Children.Add(status);
                     var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
                     timer.Tick += (s, e) =>
                     {
@@ -359,11 +436,27 @@ namespace DesktopFolders
                     window.Loaded += (s, e) => timer.Start();
                     window.Closed += (s, e) => timer.Stop();
                 }
+                AddPage(tabs, "任务栏", taskbarPage);
+                AddPage(tabs, "布局与恢复", recovery);
+                tabs.SelectedIndex = 0;
             }
             UpdatePreview();
         }
 
-        private FrameworkElement OpacityControl(string label, int value, Action<int> changed, int minimum = 20)
+        private static void AddPage(TabControl tabs, string caption, UIElement content)
+        {
+            tabs.Items.Add(new TabItem
+            {
+                Header = caption, Padding = new Thickness(12, 5, 12, 5),
+                Content = new ScrollViewer
+                {
+                    Content = content, Padding = new Thickness(0, 14, 4, 0),
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+                }
+            });
+        }
+
+        private FrameworkElement OpacityControl(string label, int value, Action<int> changed, out Slider slider, int minimum = 20)
         {
             value = Math.Max(minimum, Math.Min(100, value));
             var group = new StackPanel { Margin = new Thickness(0, 1, 0, 8) };
@@ -373,7 +466,7 @@ namespace DesktopFolders
             title.Children.Add(number);
             title.Children.Add(View.Text(label, 13, View.Ink));
             group.Children.Add(title);
-            var slider = new Slider { Minimum = minimum, Maximum = 100, Value = value, Height = 24, TickFrequency = 1, IsSnapToTickEnabled = true };
+            slider = new Slider { Minimum = minimum, Maximum = 100, Value = value, Height = 24, TickFrequency = 1, IsSnapToTickEnabled = true };
             AutomationProperties.SetName(slider, label);
             slider.ValueChanged += (s, e) =>
             {
@@ -456,8 +549,9 @@ namespace DesktopFolders
 
         public bool Show()
         {
-            var point = WindowsShell.Cursor;
-            WindowsShell.Place(window, point.X, point.Y, true);
+            bool remember = previewTile != null && global.SettingsWindowX.HasValue && global.SettingsWindowY.HasValue;
+            var point = remember ? new Drawing.Point(global.SettingsWindowX.Value, global.SettingsWindowY.Value) : WindowsShell.Cursor;
+            WindowsShell.Place(window, point.X, point.Y, !remember);
             return window.ShowDialog() == true;
         }
     }
