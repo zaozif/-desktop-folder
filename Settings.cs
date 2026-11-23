@@ -81,7 +81,6 @@ namespace DesktopFolders
     {
         private readonly string directory;
         private readonly string executable;
-        private string LinkPath { get { return Path.Combine(directory, "桌面折页.lnk"); } }
 
         public StartupShortcut(string directory, string executable)
         {
@@ -89,17 +88,20 @@ namespace DesktopFolders
             this.executable = executable;
         }
 
-        public bool Enabled { get { return File.Exists(LinkPath); } }
+        public bool Enabled { get { return DesktopLaunchShortcut.FindOwned(directory, executable) != null; } }
 
         public void SetEnabled(bool enabled)
         {
             if (enabled)
             {
-                Directory.CreateDirectory(directory);
-                WindowsShell.CreateLink(LinkPath, executable);
+                DesktopLaunchShortcut.Ensure(directory, executable);
             }
-            else if (Enabled)
-                File.Delete(LinkPath);
+            else
+            {
+                var shortcut = DesktopLaunchShortcut.FindOwned(directory, executable);
+                if (shortcut != null)
+                    File.Delete(shortcut);
+            }
         }
     }
 
@@ -158,7 +160,8 @@ namespace DesktopFolders
             global = preferences.Copy();
             draft = forFolder ? (folder.Background ?? preferences).CopyBackground() : (PanelAppearance)global;
             previewImage = image;
-            window = View.Overlay(forFolder ? "文件夹展开背景" : "桌面折页设置", 542, forFolder ? 279 : 452);
+            var settingsTitle = forFolder ? "文件夹展开背景" : Program.DisplayName + " 设置";
+            window = View.Overlay(settingsTitle, 542, forFolder ? 279 : 452);
             var body = View.Rounded(View.Paper, 15);
             body.Margin = new Thickness(5);
             body.BorderThickness = new Thickness(1);
@@ -167,7 +170,7 @@ namespace DesktopFolders
             window.Content = body;
             var layout = new DockPanel();
             body.Child = layout;
-            var title = View.Text(forFolder ? folder.Name + " · 展开背景" : "桌面折页设置", 21, View.Ink);
+            var title = View.Text(forFolder ? folder.Name + " · 展开背景" : settingsTitle, 21, View.Ink);
             title.FontWeight = FontWeights.SemiBold;
             title.Margin = new Thickness(0, 0, 0, 14);
             DockPanel.SetDock(title, Dock.Top);
@@ -347,7 +350,7 @@ namespace DesktopFolders
             }
             catch (Exception error)
             {
-                MessageBox.Show(window, "无法打开这张图片。\n" + error.Message, "桌面折页", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(window, "无法打开这张图片。\n" + error.Message, Program.DisplayName, MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
@@ -366,7 +369,7 @@ namespace DesktopFolders
             }
             catch (Exception error)
             {
-                MessageBox.Show(window, "无法编辑这张图片。\n" + error.Message, "桌面折页", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(window, "无法编辑这张图片。\n" + error.Message, Program.DisplayName, MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 

@@ -14,10 +14,16 @@ using Microsoft.Win32;
 using Drawing = System.Drawing;
 using Forms = System.Windows.Forms;
 
+[assembly: AssemblyTitle(DesktopFolders.Program.DisplayName)]
+[assembly: AssemblyProduct(DesktopFolders.Program.DisplayName)]
+
 namespace DesktopFolders
 {
     internal static class Program
     {
+        public const string DisplayName = "Desktop Folders";
+        public const string LegacyName = "桌面折页";
+
         [STAThread]
         public static void Main(string[] args)
         {
@@ -36,7 +42,11 @@ namespace DesktopFolders
             {
                 if (!first)
                     return;
-                string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "桌面折页");
+                string localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string legacyRoot = Path.Combine(localData, LegacyName);
+                string root = Path.Combine(localData, DisplayName);
+                if (!Directory.Exists(root) && Directory.Exists(legacyRoot))
+                    root = legacyRoot;
                 string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolderOption.DoNotVerify);
                 Run(root, desktop);
             }
@@ -52,7 +62,7 @@ namespace DesktopFolders
             }
             catch (Exception error)
             {
-                MessageBox.Show("无法启动桌面折页。\n" + error.Message, "桌面折页", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("无法启动 " + DisplayName + "。\n" + error.Message, DisplayName, MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -105,7 +115,7 @@ namespace DesktopFolders
             if (this.startup.Enabled)
                 RefreshStartupShortcut();
             trayIcon = Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetEntryAssembly().Location);
-            tray = new Forms.NotifyIcon { Text = "桌面折页", Icon = trayIcon, Visible = true };
+            tray = new Forms.NotifyIcon { Text = Program.DisplayName, Icon = trayIcon, Visible = true };
             UpdateTray();
             tray.DoubleClick += (s, e) =>
             {
@@ -167,7 +177,7 @@ namespace DesktopFolders
             menu.Items.Add("设置…", null, (s, e) =>
                 Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(OpenSettings)));
             menu.Items.Add(new Forms.ToolStripSeparator());
-            menu.Items.Add("退出桌面折页", null, (s, e) =>
+            menu.Items.Add("退出 " + Program.DisplayName, null, (s, e) =>
                 Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(Exit)));
             tray.ContextMenuStrip = menu;
             if (old != null)
@@ -443,7 +453,7 @@ namespace DesktopFolders
             {
                 if (String.Equals(path, desktopShortcut, StringComparison.OrdinalIgnoreCase))
                 {
-                    messages.Add("桌面折页的启动图标留在桌面，方便退出后再次打开。");
+                    messages.Add(Program.DisplayName + " 的启动图标留在桌面，方便退出后再次打开。");
                     continue;
                 }
                 if (!Store.CanImport(path))
@@ -730,9 +740,9 @@ namespace DesktopFolders
             try
             {
                 if (panel != null)
-                    MessageBox.Show(panel.Window, text, "桌面折页", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(panel.Window, text, Program.DisplayName, MessageBoxButton.OK, MessageBoxImage.Information);
                 else
-                    MessageBox.Show(text, "桌面折页", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(text, Program.DisplayName, MessageBoxButton.OK, MessageBoxImage.Information);
             }
             finally { DialogOpen = wasOpen; }
         }

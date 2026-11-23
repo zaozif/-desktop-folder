@@ -1,4 +1,4 @@
-param([string]$Output = (Join-Path $PSScriptRoot 'DesktopFolders.exe'))
+param([string]$Output = (Join-Path $PSScriptRoot 'Desktop Folders.exe'))
 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8

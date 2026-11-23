@@ -142,7 +142,7 @@ namespace DesktopFolders
         {
             this.launcher = launcher;
             Folder = folder;
-            Window = View.Overlay("桌面折页 · " + folder.Name, Width, Height);
+            Window = View.Overlay(Program.DisplayName + " · " + folder.Name, Width, Height);
             Window.ShowActivated = false;
             root = new Grid { Background = Brushes.Transparent, AllowDrop = true, Cursor = Cursors.Hand };
             stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
@@ -310,7 +310,7 @@ namespace DesktopFolders
 
         public void Refresh()
         {
-            Window.Title = "桌面折页 · " + Folder.Name;
+            Window.Title = Program.DisplayName + " · " + Folder.Name;
             AutomationProperties.SetName(root, Folder.Name);
             name.Text = Folder.Name;
             tabName.Text = Folder.Name;
@@ -413,7 +413,7 @@ namespace DesktopFolders
         {
             this.launcher = launcher;
             Tile = tile;
-            Window = View.Overlay(tile.Folder.Name + " · 桌面折页", 396, 170);
+            Window = View.Overlay(tile.Folder.Name + " · " + Program.DisplayName, 396, 170);
             var background = View.Rounded(Brushes.Transparent, 15);
             background.Margin = new Thickness(7);
             background.BorderThickness = new Thickness(1);
@@ -502,7 +502,7 @@ namespace DesktopFolders
         {
             var folder = Tile.Folder;
             title.Text = folder.Name;
-            Window.Title = folder.Name + " · 桌面折页";
+            Window.Title = folder.Name + " · " + Program.DisplayName;
             grid.Children.Clear();
             int rows = (folder.Entries.Count + Columns - 1) / Columns;
             var screen = System.Windows.Forms.Screen.GetWorkingArea(WindowsShell.Bounds(Tile.Window).Location);

@@ -5,49 +5,89 @@ namespace DesktopFolders
 {
     internal static class DesktopLaunchShortcut
     {
-        private const string Marker = "打开桌面折页";
+        private const string Marker = "Open " + Program.DisplayName;
+        private const string LegacyMarker = "打开桌面折页";
 
-        public static string Ensure(string desktop, string executable)
+        public static string Ensure(string directory, string executable)
         {
-            Directory.CreateDirectory(desktop);
-            var shellType = Type.GetTypeFromProgID("WScript.Shell", true);
-            dynamic shell = Activator.CreateInstance(shellType);
+            Directory.CreateDirectory(directory);
+            var shell = CreateShell();
+            var current = FindOwned(directory, Program.DisplayName, executable, shell);
+            if (current != null)
+            {
+                UpdateLink(shell, current, executable);
+                return current;
+            }
+
+            var legacy = FindOwned(directory, Program.LegacyName, executable, shell);
             for (int index = 1; ; index++)
             {
-                string name = index == 1 ? "桌面折页.lnk" : "桌面折页 (" + index + ").lnk";
-                var path = Path.Combine(desktop, name);
-                if (Directory.Exists(path))
+                var suffix = index == 1 ? ".lnk" : " (" + index + ").lnk";
+                var path = Path.Combine(directory, Program.DisplayName + suffix);
+                if (File.Exists(path) || Directory.Exists(path))
                     continue;
-                dynamic link = shell.CreateShortcut(path);
-                if (File.Exists(path))
+                UpdateLink(shell, legacy ?? path, executable);
+                if (legacy != null)
                 {
-                    var description = (string)link.Description;
-                    var target = (string)link.TargetPath;
-                    if (description == Marker && String.Equals(target, executable, StringComparison.OrdinalIgnoreCase) &&
-                        String.Equals((string)link.IconLocation, executable + ",0", StringComparison.OrdinalIgnoreCase))
-                        return path;
-                    if (description != Marker && !IsSameApp(target, executable))
-                        continue;
+                    File.Move(legacy, path);
                 }
-                link.TargetPath = executable;
-                link.WorkingDirectory = Path.GetDirectoryName(executable);
-                link.IconLocation = executable + ",0";
-                link.Description = Marker;
-                link.Save();
                 return path;
             }
         }
 
-        private static bool IsSameApp(string target, string executable)
+        public static string FindOwned(string directory, string executable)
         {
-            if (String.Equals(target, executable, StringComparison.OrdinalIgnoreCase))
-                return true;
-            if (String.IsNullOrEmpty(target) || !String.Equals(Path.GetDirectoryName(target),
-                Path.GetDirectoryName(executable), StringComparison.OrdinalIgnoreCase))
-                return false;
+            if (!Directory.Exists(directory))
+                return null;
+            var shell = CreateShell();
+            return FindOwned(directory, Program.DisplayName, executable, shell) ??
+                FindOwned(directory, Program.LegacyName, executable, shell);
+        }
+
+        private static object CreateShell()
+        {
+            return Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell", true));
+        }
+
+        private static string FindOwned(string directory, string baseName, string executable, object shell)
+        {
+            foreach (var path in Directory.EnumerateFiles(directory, baseName + "*.lnk"))
+            {
+                string name = Path.GetFileNameWithoutExtension(path);
+                if (!String.Equals(name, baseName, StringComparison.OrdinalIgnoreCase) &&
+                    !(name.StartsWith(baseName + " (", StringComparison.OrdinalIgnoreCase) && name.EndsWith(")", StringComparison.Ordinal)))
+                    continue;
+                dynamic link = ((dynamic)shell).CreateShortcut(path);
+                string description = link.Description;
+                string target = link.TargetPath;
+                if (description == Marker || description == LegacyMarker ||
+                    String.Equals(target, executable, StringComparison.OrdinalIgnoreCase) ||
+                    (baseName == Program.LegacyName && IsLegacyExecutable(target)))
+                    return path;
+            }
+            return null;
+        }
+
+        private static bool IsLegacyExecutable(string target)
+        {
             var name = Path.GetFileName(target);
-            return name == "桌面折页.exe" || (name.StartsWith("桌面折页_1.", StringComparison.Ordinal) &&
+            return String.Equals(name, Program.LegacyName + ".exe", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(name, "DesktopFolders.exe", StringComparison.OrdinalIgnoreCase) ||
+                (!String.IsNullOrEmpty(name) && name.StartsWith(Program.LegacyName + "_1.", StringComparison.Ordinal) &&
                 name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void UpdateLink(object shell, string path, string executable)
+        {
+            dynamic link = ((dynamic)shell).CreateShortcut(path);
+            if ((string)link.Description == Marker && String.Equals((string)link.TargetPath, executable, StringComparison.OrdinalIgnoreCase) &&
+                String.Equals((string)link.IconLocation, executable + ",0", StringComparison.OrdinalIgnoreCase))
+                return;
+            link.TargetPath = executable;
+            link.WorkingDirectory = Path.GetDirectoryName(executable);
+            link.IconLocation = executable + ",0";
+            link.Description = Marker;
+            link.Save();
         }
     }
 }
