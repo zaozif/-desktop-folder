@@ -5,6 +5,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using System.Xml.Serialization;
 using Microsoft.Win32;
 using Drawing = System.Drawing;
@@ -65,12 +66,18 @@ namespace DesktopFolders
         public bool RestoreAtExit { get; set; }
         public bool CustomizeTaskbar { get; set; }
         public int TaskbarOpacity { get; set; }
+        public int TaskbarBrightness { get; set; }
+        public int TaskbarIconsOpacity { get; set; }
+        public bool TaskbarTopLine { get; set; }
 
         public Preferences()
         {
             TileOpacity = 100;
             RestoreAtExit = true;
-            TaskbarOpacity = 85;
+            TaskbarOpacity = 100;
+            TaskbarBrightness = 100;
+            TaskbarIconsOpacity = 100;
+            TaskbarTopLine = true;
         }
 
         public Preferences Copy() { return (Preferences)MemberwiseClone(); }
@@ -154,14 +161,16 @@ namespace DesktopFolders
         public bool StartWithWindows { get { return startup != null && startup.IsChecked == true; } }
 
         public SettingsDialog(Preferences preferences, ImageSource image, bool startsWithWindows, Folder folder = null,
-            Action<bool, int> previewTaskbar = null)
+            Action<Preferences> previewTaskbar = null, bool advancedTaskbar = false, Func<string> taskbarStatus = null)
         {
             bool forFolder = folder != null;
             global = preferences.Copy();
             draft = forFolder ? (folder.Background ?? preferences).CopyBackground() : (PanelAppearance)global;
             previewImage = image;
             var settingsTitle = forFolder ? "文件夹展开背景" : Program.DisplayName + " 设置";
-            window = View.Overlay(settingsTitle, 542, forFolder ? 279 : 452);
+            window = View.Overlay(settingsTitle, 542, forFolder ? 279 : advancedTaskbar ? 575 : 452);
+            if (!forFolder)
+                window.MaxHeight = SystemParameters.WorkArea.Height - 12;
             var body = View.Rounded(View.Paper, 15);
             body.Margin = new Thickness(5);
             body.BorderThickness = new Thickness(1);
@@ -238,7 +247,10 @@ namespace DesktopFolders
             sampleLayout.Children.Add(samplePanel);
 
             var controls = new StackPanel();
-            layout.Children.Add(controls);
+            if (forFolder)
+                layout.Children.Add(controls);
+            else
+                layout.Children.Add(new ScrollViewer { Content = controls, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
             if (!forFolder)
                 controls.Children.Add(OpacityControl("桌面图标不透明度", global.TileOpacity, value => global.TileOpacity = value));
             controls.Children.Add(OpacityControl("展开背景不透明度", draft.PanelOpacity, value => draft.PanelOpacity = value));
@@ -277,27 +289,67 @@ namespace DesktopFolders
 
                 var taskbar = new CheckBox
                 {
-                    Content = "自定义任务栏背景透明度", IsChecked = global.CustomizeTaskbar, Margin = new Thickness(0, 12, 0, 5)
+                    Content = advancedTaskbar ? "自定义任务栏外观" : "自定义任务栏背景透明度",
+                    IsChecked = global.CustomizeTaskbar, Margin = new Thickness(0, 12, 0, 5)
                 };
-                var opacity = OpacityControl("任务栏背景不透明度", global.TaskbarOpacity, value =>
+                var taskbarControls = new StackPanel { IsEnabled = global.CustomizeTaskbar };
+                Action previewAppearance = () => { if (previewTaskbar != null) previewTaskbar(global); };
+                if (advancedTaskbar)
+                    taskbarControls.Children.Add(OpacityControl("背景亮度", global.TaskbarBrightness, value =>
+                    {
+                        global.TaskbarBrightness = value;
+                        previewAppearance();
+                    }, minimum: 0));
+                var opacity = OpacityControl(advancedTaskbar ? "背景不透明度" : "任务栏背景不透明度", global.TaskbarOpacity, value =>
                 {
                     global.TaskbarOpacity = value;
-                    if (previewTaskbar != null) previewTaskbar(global.CustomizeTaskbar, value);
+                    previewAppearance();
                 }, minimum: 0);
-                opacity.IsEnabled = global.CustomizeTaskbar;
-                opacity.ToolTip = "0% 使用最低背景不透明度，100% 恢复系统外观。";
-                taskbar.Checked += (s, e) =>
+                opacity.ToolTip = advancedTaskbar ? "0% 为全透明，100% 使用系统原有不透明度。" :
+                    "0% 使用最低背景不透明度，100% 恢复系统外观。";
+                taskbarControls.Children.Add(opacity);
+                if (advancedTaskbar)
                 {
-                    global.CustomizeTaskbar = opacity.IsEnabled = true;
-                    if (previewTaskbar != null) previewTaskbar(true, global.TaskbarOpacity);
-                };
-                taskbar.Unchecked += (s, e) =>
+                    taskbarControls.Children.Add(OpacityControl("图标和文字不透明度", global.TaskbarIconsOpacity, value =>
+                    {
+                        global.TaskbarIconsOpacity = value;
+                        previewAppearance();
+                    }, minimum: 0));
+                    var topLine = new CheckBox { Content = "显示任务栏顶部线", IsChecked = global.TaskbarTopLine };
+                    RoutedEventHandler showLine = (s, e) =>
+                    {
+                        global.TaskbarTopLine = topLine.IsChecked == true;
+                        previewAppearance();
+                    };
+                    topLine.Checked += showLine;
+                    topLine.Unchecked += showLine;
+                    taskbarControls.Children.Add(topLine);
+                }
+                RoutedEventHandler changeTaskbar = (s, e) =>
                 {
-                    global.CustomizeTaskbar = opacity.IsEnabled = false;
-                    if (previewTaskbar != null) previewTaskbar(false, global.TaskbarOpacity);
+                    global.CustomizeTaskbar = taskbarControls.IsEnabled = taskbar.IsChecked == true;
+                    previewAppearance();
                 };
+                taskbar.Checked += changeTaskbar;
+                taskbar.Unchecked += changeTaskbar;
                 controls.Children.Add(taskbar);
-                controls.Children.Add(opacity);
+                controls.Children.Add(taskbarControls);
+                if (advancedTaskbar && taskbarStatus != null)
+                {
+                    var status = View.Text("", 12, View.Secondary);
+                    status.Visibility = Visibility.Collapsed;
+                    status.TextWrapping = TextWrapping.Wrap;
+                    status.Margin = new Thickness(0, 5, 0, 0);
+                    controls.Children.Add(status);
+                    var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+                    timer.Tick += (s, e) =>
+                    {
+                        status.Text = taskbarStatus() ?? "";
+                        status.Visibility = status.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+                    };
+                    window.Loaded += (s, e) => timer.Start();
+                    window.Closed += (s, e) => timer.Stop();
+                }
             }
             UpdatePreview();
         }

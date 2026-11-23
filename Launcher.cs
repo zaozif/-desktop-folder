@@ -74,7 +74,7 @@ namespace DesktopFolders
         private readonly StartupShortcut startup;
         private readonly bool actualDesktop;
         private readonly string desktopShortcut;
-        private readonly TaskbarOpacity taskbar = new TaskbarOpacity();
+        private readonly TaskbarTuning taskbar;
         private readonly string folderStorage;
         private readonly List<FolderTile> tiles = new List<FolderTile>();
         private readonly Dictionary<string, ImageSource> icons = new Dictionary<string, ImageSource>();
@@ -92,6 +92,7 @@ namespace DesktopFolders
         public Launcher(Store store, StartupShortcut startup = null, string folderStorage = @"D:\desktop")
         {
             this.store = store;
+            taskbar = new TaskbarTuning(store.DataDirectory);
             this.folderStorage = folderStorage;
             this.startup = startup ?? new StartupShortcut(Environment.GetFolderPath(Environment.SpecialFolder.Startup,
                 Environment.SpecialFolderOption.DoNotVerify), Assembly.GetEntryAssembly().Location);
@@ -130,7 +131,7 @@ namespace DesktopFolders
             desktopTimer.Tick += (s, e) => DesktopTick();
             desktopTimer.Start();
             SystemEvents.DisplaySettingsChanged += DisplayChanged;
-            ApplyTaskbar(Preferences.CustomizeTaskbar, Preferences.TaskbarOpacity);
+            ApplyTaskbar(Preferences);
         }
 
         private void DisplayChanged(object sender, EventArgs e)
@@ -640,8 +641,8 @@ namespace DesktopFolders
 
         public void OpenSettings()
         {
-            var dialog = new SettingsDialog(Preferences, PanelImage, startup.Enabled, previewTaskbar: (enabled, opacity) =>
-                ApplyTaskbar(enabled, opacity));
+            var dialog = new SettingsDialog(Preferences, PanelImage, startup.Enabled, previewTaskbar: value =>
+                ApplyTaskbar(value), advancedTaskbar: TaskbarTuning.SupportsAdvanced, taskbarStatus: () => taskbar.Status);
             DialogOpen = true;
             try
             {
@@ -657,20 +658,20 @@ namespace DesktopFolders
                         panel.ApplyAppearance();
                     if (startup.Enabled != dialog.StartWithWindows)
                         startup.SetEnabled(dialog.StartWithWindows);
-                    if (!ApplyTaskbar(Preferences.CustomizeTaskbar, Preferences.TaskbarOpacity))
+                    if (!ApplyTaskbar(Preferences))
                         Notify("Windows 暂时无法应用任务栏背景透明度。");
                 });
             }
             finally
             {
-                ApplyTaskbar(Preferences.CustomizeTaskbar, Preferences.TaskbarOpacity);
+                ApplyTaskbar(Preferences);
                 DialogOpen = false;
             }
         }
 
-        private bool ApplyTaskbar(bool enabled, int opacity)
+        private bool ApplyTaskbar(Preferences value)
         {
-            return !actualDesktop || taskbar.Set(enabled, opacity);
+            return !actualDesktop || taskbar.Set(value);
         }
 
         public void OpenFolderBackground(Folder folder)

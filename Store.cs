@@ -58,6 +58,7 @@ namespace DesktopFolders
         private readonly string publicDesktop;
         public readonly List<Folder> Folders;
         public readonly bool IsNew;
+        internal string DataDirectory { get { return root; } }
         public Preferences Preferences { get; private set; }
 
         public Store(string root, string desktop, string publicDesktop = null)
