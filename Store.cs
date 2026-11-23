@@ -100,8 +100,15 @@ namespace DesktopFolders
 
         public void SaveExitReport(IEnumerable<string> notices)
         {
-            File.WriteAllText(Path.Combine(root, "退出还原记录.txt"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") +
+            File.WriteAllText(ExitReportPath, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") +
                 Environment.NewLine + Environment.NewLine + String.Join(Environment.NewLine + Environment.NewLine, notices));
+        }
+
+        private string ExitReportPath { get { return Path.Combine(root, "退出还原记录.txt"); } }
+
+        public string ReadExitReport()
+        {
+            return File.Exists(ExitReportPath) ? File.ReadAllText(ExitReportPath) : "还没有退出还原记录。";
         }
 
         private string StoredFile(Entry entry)
@@ -482,6 +489,36 @@ namespace DesktopFolders
         public IEnumerable<Entry> ReturnedEntries
         {
             get { return Folders.SelectMany(folder => folder.Entries).Where(entry => entry.ReturnedName != null); }
+        }
+
+        public IEnumerable<Entry> LayoutEntries
+        {
+            get { return Folders.SelectMany(folder => folder.Entries).Where(entry => entry.ReturnOnExit); }
+        }
+
+        public string VisibleLayoutPath(Entry entry)
+        {
+            string stored = StoredFile(entry);
+            var candidates = new[]
+            {
+                entry.ReturnedName == null ? null : Path.Combine(Desktop, entry.ReturnedName),
+                entry.OriginalShortcutPath,
+                Path.Combine(Desktop, entry.FileName),
+                String.IsNullOrEmpty(publicDesktop) ? null : Path.Combine(publicDesktop, entry.FileName)
+            };
+            return candidates.FirstOrDefault(path => !String.IsNullOrEmpty(path) && IsOnDesktop(path) && SameContents(stored, path));
+        }
+
+        public void RecordLayout(IDictionary<Entry, Point> positions)
+        {
+            var previous = positions.ToDictionary(pair => pair.Key, pair => pair.Key.DesktopPosition);
+            Edit(() =>
+            {
+                foreach (var pair in positions) pair.Key.DesktopPosition = pair.Value;
+            }, () =>
+            {
+                foreach (var pair in previous) pair.Key.DesktopPosition = pair.Value;
+            });
         }
 
         public string ReturnUntilNextStart(Entry entry)

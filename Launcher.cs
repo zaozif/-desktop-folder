@@ -67,7 +67,7 @@ namespace DesktopFolders
         }
     }
 
-    internal sealed class Launcher : IDisposable
+    internal sealed partial class Launcher : IDisposable
     {
         public const string EntryFormat = "DesktopFolders.EntryId";
         private readonly Store store;
@@ -120,6 +120,11 @@ namespace DesktopFolders
             UpdateTray();
             tray.DoubleClick += (s, e) =>
             {
+                if (editingLayout)
+                {
+                    if (layoutWindow != null) layoutWindow.Activate();
+                    return;
+                }
                 if (tiles.Count == 0)
                     NewFolder();
                 else
@@ -138,6 +143,8 @@ namespace DesktopFolders
         {
             Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
+                if (editingLayout)
+                    return;
                 ClosePanel();
                 foreach (var tile in tiles)
                     tile.ApplyPlacement();
@@ -152,9 +159,13 @@ namespace DesktopFolders
                 desktop = WindowsShell.FindDesktop();
             if (refresh)
                 taskbar.Refresh();
+            if (editingLayout || exiting)
+                return;
             IntPtr previous = IntPtr.Zero;
             foreach (var tile in tiles)
             {
+                if (!tile.Window.IsVisible)
+                    continue;
                 WindowsShell.StackAboveDesktop(tile.Window, desktop, previous);
                 if (tick % 4 == 0)
                     tile.RefreshEdgeContrast();
@@ -166,23 +177,33 @@ namespace DesktopFolders
         {
             var old = tray.ContextMenuStrip;
             var menu = new Forms.ContextMenuStrip();
-            menu.Items.Add("新建文件夹…", null, (s, e) =>
-                Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(NewFolder)));
-            if (tiles.Count != 0)
+            if (!editingLayout)
             {
-                var folders = new Forms.ToolStripMenuItem("打开文件夹");
-                foreach (var tile in tiles)
-                    folders.DropDownItems.Add(tile.Folder.Name, null, (s, e) => Toggle(tile));
-                menu.Items.Add(folders);
+                AddTrayAction(menu, "新建文件夹…", NewFolder);
+                if (tiles.Count != 0)
+                {
+                    var folders = new Forms.ToolStripMenuItem("打开文件夹");
+                    foreach (var tile in tiles)
+                        folders.DropDownItems.Add(tile.Folder.Name, null, (s, e) => Toggle(tile));
+                    menu.Items.Add(folders);
+                }
+                AddTrayAction(menu, "调整原始布局…", OpenLayoutEditor);
+                AddTrayAction(menu, "查看上次退出还原结果…", ShowLastRestore);
+                AddTrayAction(menu, "设置…", OpenSettings);
             }
-            menu.Items.Add("设置…", null, (s, e) =>
-                Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(OpenSettings)));
+            else
+                AddTrayAction(menu, "继续调整布局", () => { if (layoutWindow != null) layoutWindow.Activate(); });
             menu.Items.Add(new Forms.ToolStripSeparator());
-            menu.Items.Add("退出 " + Program.DisplayName, null, (s, e) =>
-                Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(Exit)));
+            AddTrayAction(menu, "退出 " + Program.DisplayName, Exit);
             tray.ContextMenuStrip = menu;
             if (old != null)
                 Application.Current.Dispatcher.BeginInvoke(new Action(old.Dispose));
+        }
+
+        private static void AddTrayAction(Forms.ContextMenuStrip menu, string caption, Action action)
+        {
+            menu.Items.Add(caption, null, (s, e) =>
+                Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, action));
         }
 
         private List<Folder> AllocateFolders(IEnumerable<string> names)
@@ -448,6 +469,8 @@ namespace DesktopFolders
 
         private void Import(Folder folder, IEnumerable<string> paths)
         {
+            if (editingLayout || exiting)
+                return;
             var messages = new List<string>();
             using (var snapshot = actualDesktop && paths.Any(store.IsDesktopItem) ? DesktopIcons.Open() : null)
             foreach (var path in paths)
@@ -539,13 +562,13 @@ namespace DesktopFolders
             });
         }
 
-        private void RecollectReturned()
+        private void RecollectReturned(bool learnMissingPositions = true)
         {
             var entries = store.ReturnedEntries.ToList();
             if (entries.Count == 0)
                 return;
             var messages = new List<string>();
-            using (var snapshot = actualDesktop ? DesktopIcons.Open() : null)
+            using (var snapshot = actualDesktop && learnMissingPositions ? DesktopIcons.Open() : null)
                 foreach (var entry in entries)
                 {
                     try
@@ -586,54 +609,24 @@ namespace DesktopFolders
             if (exiting)
                 return;
             exiting = true;
-            var failures = new List<string>();
-            var placements = new Dictionary<string, Drawing.Point>(StringComparer.OrdinalIgnoreCase);
-            var returned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            int withoutPosition = 0;
             try
             {
                 ClosePanel();
+                StopLayoutEditor();
                 if (Preferences.RestoreAtExit)
-                    foreach (var entry in store.Folders.SelectMany(folder => folder.Entries).Where(item => item.ReturnOnExit))
-                    {
-                        try
-                        {
-                            var path = store.ReturnUntilNextStart(entry);
-                            if (actualDesktop && path != null && returned.Add(path))
-                            {
-                                if (entry.DesktopPosition.HasValue)
-                                    placements[path] = entry.DesktopPosition.Value;
-                                else
-                                    withoutPosition++;
-                            }
-                        }
-                        catch (Exception error) { failures.Add(entry.Name + "：" + error.Message); }
-                    }
-                DesktopRestore.Begin(returned, placements, desktopShortcut, (missed, automatic) =>
-                    FinishExit(failures, withoutPosition, missed, automatic));
+                    ReturnDesktopShortcuts(FinishExit);
+                else
+                {
+                    RecollectReturned(false);
+                    Application.Current.Shutdown();
+                }
             }
-            catch (Exception error)
-            {
-                failures.Add(error.Message);
-                FinishExit(failures, withoutPosition, placements.Count, false);
-            }
+            catch (Exception error) { FinishExit(new[] { error.Message }); }
         }
 
-        private void FinishExit(List<string> failures, int withoutPosition, int missed, bool automatic)
+        private void FinishExit(IEnumerable<string> report)
         {
-            try
-            {
-                var notices = new List<string>();
-                if (failures.Count != 0)
-                    notices.Add("还原快捷方式时遇到错误。\n" + String.Join("\n", failures));
-                if (withoutPosition != 0)
-                    notices.Add(withoutPosition + " 个旧快捷方式没有原坐标，已按 Windows 布局放回。");
-                if (missed != 0)
-                    notices.Add(automatic ? "Windows 启用了自动排列，" + missed + " 个快捷方式已由 Windows 摆放。" :
-                        missed + " 个快捷方式已放回桌面，原位被占用或 Explorer 未能还原该位置。");
-                if (notices.Count != 0)
-                    store.SaveExitReport(notices);
-            }
+            try { store.SaveExitReport(report); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
             finally { Application.Current.Shutdown(); }
@@ -641,6 +634,8 @@ namespace DesktopFolders
 
         public void OpenSettings()
         {
+            if (DialogOpen || exiting)
+                return;
             var dialog = new SettingsDialog(Preferences, PanelImage, startup.Enabled, previewTaskbar: value =>
                 ApplyTaskbar(value), advancedTaskbar: TaskbarTuning.SupportsAdvanced, taskbarStatus: () => taskbar.Status);
             DialogOpen = true;

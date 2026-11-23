@@ -105,11 +105,6 @@ namespace DesktopFolders
             return paths.Count(path => items.ContainsKey(path));
         }
 
-        public int CountAtOriginalPositions(IDictionary<string, Point> requested)
-        {
-            return requested.Count(pair => Position(pair.Key) == pair.Value);
-        }
-
         // Only the organizer's own launcher can be moved out of an original slot.
         public void PlaceAvailable(IDictionary<string, Point> requested, string launcherShortcut)
         {
