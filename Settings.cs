@@ -274,9 +274,9 @@ namespace DesktopFolders
 
                 var taskbar = new CheckBox
                 {
-                    Content = "自定义任务栏透明度", IsChecked = global.CustomizeTaskbar, Margin = new Thickness(0, 12, 0, 5)
+                    Content = "自定义任务栏背景透明度", IsChecked = global.CustomizeTaskbar, Margin = new Thickness(0, 12, 0, 5)
                 };
-                var opacity = OpacityControl("任务栏不透明度", global.TaskbarOpacity, value =>
+                var opacity = OpacityControl("任务栏背景不透明度", global.TaskbarOpacity, value =>
                 {
                     global.TaskbarOpacity = value;
                     if (previewTaskbar != null) previewTaskbar(global.CustomizeTaskbar, value);
