@@ -97,6 +97,12 @@ namespace DesktopFolders
             return entry.OriginalPath ?? Path.Combine(root, "shortcuts", entry.Id, entry.FileName);
         }
 
+        public void SaveExitReport(IEnumerable<string> notices)
+        {
+            File.WriteAllText(Path.Combine(root, "退出还原记录.txt"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") +
+                Environment.NewLine + Environment.NewLine + String.Join(Environment.NewLine + Environment.NewLine, notices));
+        }
+
         private string StoredFile(Entry entry)
         {
             return Path.Combine(root, "shortcuts", entry.Id, entry.FileName);

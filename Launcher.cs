@@ -167,7 +167,8 @@ namespace DesktopFolders
             menu.Items.Add("设置…", null, (s, e) =>
                 Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(OpenSettings)));
             menu.Items.Add(new Forms.ToolStripSeparator());
-            menu.Items.Add("退出桌面折页", null, (s, e) => Exit());
+            menu.Items.Add("退出桌面折页", null, (s, e) =>
+                Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(Exit)));
             tray.ContextMenuStrip = menu;
             if (old != null)
                 Application.Current.Dispatcher.BeginInvoke(new Action(old.Dispose));
@@ -574,41 +575,57 @@ namespace DesktopFolders
             if (exiting)
                 return;
             exiting = true;
-            ClosePanel();
-            var messages = new List<string>();
+            var failures = new List<string>();
             var placements = new Dictionary<string, Drawing.Point>(StringComparer.OrdinalIgnoreCase);
             var returned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int withoutPosition = 0;
-            if (Preferences.RestoreAtExit)
-                foreach (var entry in store.Folders.SelectMany(folder => folder.Entries).Where(item => item.ReturnOnExit))
-                {
-                    try
+            try
+            {
+                ClosePanel();
+                if (Preferences.RestoreAtExit)
+                    foreach (var entry in store.Folders.SelectMany(folder => folder.Entries).Where(item => item.ReturnOnExit))
                     {
-                        var path = store.ReturnUntilNextStart(entry);
-                        if (actualDesktop && path != null && returned.Add(path))
+                        try
                         {
-                            if (entry.DesktopPosition.HasValue)
-                                placements[path] = entry.DesktopPosition.Value;
-                            else
-                                withoutPosition++;
+                            var path = store.ReturnUntilNextStart(entry);
+                            if (actualDesktop && path != null && returned.Add(path))
+                            {
+                                if (entry.DesktopPosition.HasValue)
+                                    placements[path] = entry.DesktopPosition.Value;
+                                else
+                                    withoutPosition++;
+                            }
                         }
+                        catch (Exception error) { failures.Add(entry.Name + "：" + error.Message); }
                     }
-                    catch (Exception error) { messages.Add(entry.Name + "：" + error.Message); }
-                }
-            DesktopRestore.Begin(returned, placements, desktopShortcut, (missed, automatic) =>
+                DesktopRestore.Begin(returned, placements, desktopShortcut, (missed, automatic) =>
+                    FinishExit(failures, withoutPosition, missed, automatic));
+            }
+            catch (Exception error)
+            {
+                failures.Add(error.Message);
+                FinishExit(failures, withoutPosition, placements.Count, false);
+            }
+        }
+
+        private void FinishExit(List<string> failures, int withoutPosition, int missed, bool automatic)
+        {
+            try
             {
                 var notices = new List<string>();
-                if (messages.Count != 0)
-                    notices.Add("部分快捷方式仍保存在桌面折页中。\n" + String.Join("\n", messages));
+                if (failures.Count != 0)
+                    notices.Add("还原快捷方式时遇到错误。\n" + String.Join("\n", failures));
                 if (withoutPosition != 0)
                     notices.Add(withoutPosition + " 个旧快捷方式没有原坐标，已按 Windows 布局放回。");
                 if (missed != 0)
                     notices.Add(automatic ? "Windows 启用了自动排列，" + missed + " 个快捷方式已由 Windows 摆放。" :
                         missed + " 个快捷方式已放回桌面，原位被占用或 Explorer 未能还原该位置。");
                 if (notices.Count != 0)
-                    Notify(String.Join("\n\n", notices));
-                Application.Current.Shutdown();
-            });
+                    store.SaveExitReport(notices);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            finally { Application.Current.Shutdown(); }
         }
 
         public void OpenSettings()

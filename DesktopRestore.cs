@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Threading;
 
 namespace DesktopFolders
@@ -29,18 +30,22 @@ namespace DesktopFolders
             {
                 attempt++;
                 bool autoArrange = false;
-                using (var desktop = DesktopIcons.Open())
+                try
                 {
-                    if (desktop != null)
+                    using (var desktop = DesktopIcons.Open())
                     {
-                        autoArrange = desktop.AutoArrange;
-                        lastCount = desktop.CountAtOriginalPositions(positions);
-                        bool ready = desktop.VisibleCount(returned) == returned.Count;
-                        steady = ready && lastCount == positions.Count ? steady + 1 : 0;
-                        if (!autoArrange && lastCount < positions.Count && (ready || attempt >= 6) && attempt < 14)
-                            desktop.PlaceAvailable(positions, launcherShortcut);
+                        if (desktop != null)
+                        {
+                            autoArrange = desktop.AutoArrange;
+                            lastCount = desktop.CountAtOriginalPositions(positions);
+                            bool ready = desktop.VisibleCount(returned) == returned.Count;
+                            steady = ready && lastCount == positions.Count ? steady + 1 : 0;
+                            if (!autoArrange && lastCount < positions.Count && (ready || attempt >= 6) && attempt < 14)
+                                desktop.PlaceAvailable(positions, launcherShortcut);
+                        }
                     }
                 }
+                catch (COMException) { steady = 0; }
                 if (autoArrange || steady >= 2 || attempt >= 14)
                 {
                     check.Stop();
