@@ -283,8 +283,9 @@ namespace DesktopFolders
                 {
                     global.TaskbarOpacity = value;
                     if (previewTaskbar != null) previewTaskbar(global.CustomizeTaskbar, value);
-                });
+                }, minimum: 0);
                 opacity.IsEnabled = global.CustomizeTaskbar;
+                opacity.ToolTip = "0% 使用最低背景不透明度，100% 恢复系统外观。";
                 taskbar.Checked += (s, e) =>
                 {
                     global.CustomizeTaskbar = opacity.IsEnabled = true;
@@ -301,8 +302,9 @@ namespace DesktopFolders
             UpdatePreview();
         }
 
-        private FrameworkElement OpacityControl(string label, int value, Action<int> changed)
+        private FrameworkElement OpacityControl(string label, int value, Action<int> changed, int minimum = 20)
         {
+            value = Math.Max(minimum, Math.Min(100, value));
             var group = new StackPanel { Margin = new Thickness(0, 1, 0, 8) };
             var title = new DockPanel();
             var number = View.Text(value + "%", 12, View.Secondary);
@@ -310,7 +312,7 @@ namespace DesktopFolders
             title.Children.Add(number);
             title.Children.Add(View.Text(label, 13, View.Ink));
             group.Children.Add(title);
-            var slider = new Slider { Minimum = 20, Maximum = 100, Value = value, Height = 24, TickFrequency = 1, IsSnapToTickEnabled = true };
+            var slider = new Slider { Minimum = minimum, Maximum = 100, Value = value, Height = 24, TickFrequency = 1, IsSnapToTickEnabled = true };
             AutomationProperties.SetName(slider, label);
             slider.ValueChanged += (s, e) =>
             {

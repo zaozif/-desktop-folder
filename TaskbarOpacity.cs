@@ -22,7 +22,7 @@ namespace DesktopFolders
                 Restore();
                 return true;
             }
-            targetAlpha = (byte)Math.Round(Math.Max(20, opacity) * 255.0 / 100);
+            targetAlpha = (byte)Math.Round(Math.Max(0, opacity) * 255.0 / 100);
             return Refresh();
         }
 

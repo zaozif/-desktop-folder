@@ -658,7 +658,7 @@ namespace DesktopFolders
                     if (startup.Enabled != dialog.StartWithWindows)
                         startup.SetEnabled(dialog.StartWithWindows);
                     if (!ApplyTaskbar(Preferences.CustomizeTaskbar, Preferences.TaskbarOpacity))
-                        Notify("Windows 暂时无法应用任务栏透明度。");
+                        Notify("Windows 暂时无法应用任务栏背景透明度。");
                 });
             }
             finally
