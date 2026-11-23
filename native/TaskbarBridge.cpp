@@ -13,9 +13,9 @@
 namespace {
 using winrt::Windows::UI::Xaml::FrameworkElement;
 
-constexpr CLSID bridgeClass{0x4f807566, 0x6d8a, 0x478c, {0xb7, 0x12, 0x2f, 0xde, 0xae, 0x02, 0xb6, 0x67}};
-constexpr auto settingsName = L"Local\\DesktopFolders.TaskbarAppearance.v2";
-constexpr auto markerPrefix = L"Local\\DesktopFolders.TaskbarWatcher.v2.";
+constexpr CLSID bridgeClass{0x4f807566, 0x6d8a, 0x478c, {0xb7, 0x12, 0x2f, 0xde, 0xae, 0x02, 0xb6, 0x68}};
+constexpr auto settingsName = L"Local\\DesktopFolders.TaskbarAppearance.v3";
+constexpr auto markerPrefix = L"Local\\DesktopFolders.TaskbarWatcher.v3.";
 
 struct SharedSettings {
     volatile LONG value;

@@ -11,11 +11,11 @@ namespace DesktopFolders
 {
     internal sealed class TaskbarTuning : IDisposable
     {
-        private const string SettingsMap = @"Local\DesktopFolders.TaskbarAppearance.v2";
-        private const string WatcherMarker = @"Local\DesktopFolders.TaskbarWatcher.v2.";
+        private const string SettingsMap = @"Local\DesktopFolders.TaskbarAppearance.v3";
+        private const string WatcherMarker = @"Local\DesktopFolders.TaskbarWatcher.v3.";
         private const string BridgeResource = "DesktopFolders.TaskbarTuning.x64.dll";
         private const int NotFound = unchecked((int)0x80070490);
-        private static readonly Guid BridgeClass = new Guid("4f807566-6d8a-478c-b712-2fdeae02b667");
+        private static readonly Guid BridgeClass = new Guid("4f807566-6d8a-478c-b712-2fdeae02b668");
         private readonly string dataDirectory;
         private readonly TaskbarOpacity legacy = new TaskbarOpacity();
         private MemoryMappedFile mapping;

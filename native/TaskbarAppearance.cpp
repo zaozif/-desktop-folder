@@ -6,6 +6,7 @@
 #include "TaskbarAppearance.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cwchar>
 #include <optional>
 #include <string>
@@ -748,7 +749,7 @@ void RestoreState(AppearanceState& state) {
 
     if (auto backgroundFill = state.backgroundFill.get(); backgroundFill && state.appliedFillOpacity) {
         try {
-            if (backgroundFill.Opacity() == *state.appliedFillOpacity)
+            if (std::abs(backgroundFill.Opacity() - *state.appliedFillOpacity) < 0.000001)
                 backgroundFill.Opacity(state.originalFillOpacity);
         } catch (...) {
         }
@@ -770,7 +771,7 @@ void RestoreState(AppearanceState& state) {
     for (auto& [element, originalOpacity, appliedOpacity] : state.foregroundOpacity) {
         if (auto elem = element.get()) {
             try {
-                if (elem.Opacity() == appliedOpacity)
+                if (std::abs(elem.Opacity() - appliedOpacity) < 0.000001)
                     elem.Opacity(originalOpacity);
             } catch (...) {
             }
@@ -894,6 +895,7 @@ void ApplyBackgroundStyle(Shapes::Rectangle const& backgroundFill,
     if (hasOpacity) {
         state.appliedFillOpacity = g_settings.backgroundOpacity / 100.0;
         backgroundFill.Opacity(*state.appliedFillOpacity);
+        state.appliedFillOpacity = backgroundFill.Opacity();
     }
 
     if (!hasBrightness) {
@@ -991,6 +993,7 @@ void ApplyForegroundStyle(std::vector<FrameworkElement> const& elements,
         double applied = original * (g_settings.iconsOpacity / 100.0);
         state.foregroundOpacity.push_back({winrt::make_weak(element), original, applied});
         element.Opacity(applied);
+        state.foregroundOpacity.back().applied = element.Opacity();
     }
 }
 
