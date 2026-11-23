@@ -3,7 +3,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -180,30 +179,16 @@ namespace DesktopFolders
                 window.Height = Math.Min(window.Height, SystemParameters.WorkArea.Height - 12);
                 window.Closing += (s, e) => WindowPosition = WindowsShell.Bounds(window).Location;
             }
-            var body = View.Rounded(View.Paper, 15);
-            body.Margin = new Thickness(5);
-            body.BorderThickness = new Thickness(1);
-            body.BorderBrush = View.Edge;
-            body.Padding = new Thickness(20, 16, 20, 15);
+            var body = View.DialogSurface(new Thickness(20, 16, 20, 15));
             window.Content = body;
             var layout = new DockPanel();
             body.Child = layout;
-            var title = View.Text(forFolder ? folder.Name + " · 展开背景" : settingsTitle, 21, View.Ink);
-            title.FontWeight = FontWeights.SemiBold;
-            title.Margin = new Thickness(0, 0, 0, 14);
-            title.Background = Brushes.Transparent;
-            title.MouseLeftButtonDown += (s, e) =>
-            {
-                if (e.ButtonState != MouseButtonState.Pressed)
-                    return;
-                e.Handled = true;
-                window.DragMove();
-            };
+            var title = View.DialogHeading(window, forFolder ? folder.Name + " · 展开背景" : settingsTitle, 14);
             DockPanel.SetDock(title, Dock.Top);
             layout.Children.Add(title);
 
             var footer = new DockPanel();
-            var tabs = new TabControl { Margin = new Thickness(0, 0, 0, 8), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
+            var tabs = View.Sections();
             var resetActions = new Action[3];
             if (forFolder)
             {
@@ -227,7 +212,8 @@ namespace DesktopFolders
             }
             var decisions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             var close = View.Button("取消", "取消", () => window.DialogResult = false);
-            var save = View.Button("保存", "保存设置", () => window.DialogResult = true);
+            var save = View.Button("保存", "保存设置", () => window.DialogResult = true, primary: true);
+            save.Margin = new Thickness(6, 0, 0, 0);
             close.Width = save.Width = 68;
             close.Height = save.Height = 34;
             close.IsCancel = true;
@@ -249,7 +235,7 @@ namespace DesktopFolders
             var previewHeading = View.Text("外观预览", 12, View.Secondary);
             previewHeading.Margin = new Thickness(0, 1, 0, 7);
             preview.Children.Add(previewHeading);
-            var samples = View.Rounded(View.ColorBrush("#CEDCF3"), 12);
+            var samples = View.Rounded(View.Tint, 13);
             samples.Height = forFolder ? 115 : 198;
             samples.Padding = new Thickness(9);
             preview.Children.Add(samples);
@@ -450,7 +436,7 @@ namespace DesktopFolders
                 Header = caption, Padding = new Thickness(12, 5, 12, 5),
                 Content = new ScrollViewer
                 {
-                    Content = content, Padding = new Thickness(0, 14, 4, 0),
+                    Content = content, Padding = new Thickness(0, 0, 4, 0),
                     VerticalScrollBarVisibility = ScrollBarVisibility.Auto
                 }
             });
@@ -506,7 +492,7 @@ namespace DesktopFolders
             }
             catch (Exception error)
             {
-                MessageBox.Show(window, "无法打开这张图片。\n" + error.Message, Program.DisplayName, MessageBoxButton.OK, MessageBoxImage.Information);
+                View.ShowNotice("无法打开图片", error.Message, window);
             }
         }
 
@@ -525,7 +511,7 @@ namespace DesktopFolders
             }
             catch (Exception error)
             {
-                MessageBox.Show(window, "无法编辑这张图片。\n" + error.Message, Program.DisplayName, MessageBoxButton.OK, MessageBoxImage.Information);
+                View.ShowNotice("无法编辑图片", error.Message, window);
             }
         }
 

@@ -176,13 +176,14 @@ namespace DesktopFolders
         private void UpdateTray()
         {
             var old = tray.ContextMenuStrip;
-            var menu = new Forms.ContextMenuStrip();
+            var menu = TrayTheme.CreateMenu();
             if (!editingLayout)
             {
                 AddTrayAction(menu, "新建文件夹…", NewFolder);
                 if (tiles.Count != 0)
                 {
                     var folders = new Forms.ToolStripMenuItem("打开文件夹");
+                    folders.DropDown = TrayTheme.CreateMenu();
                     foreach (var tile in tiles)
                         folders.DropDownItems.Add(tile.Folder.Name, null, (s, e) => Toggle(tile));
                     menu.Items.Add(folders);
@@ -344,15 +345,9 @@ namespace DesktopFolders
         private string[] AskNames(string title, string existing, bool batch)
         {
             var window = View.Overlay(title, 364, batch ? 288 : 176);
-            var surface = View.Rounded(View.Paper, 13);
-            surface.BorderBrush = View.Edge;
-            surface.BorderThickness = new Thickness(1);
-            surface.Margin = new Thickness(5);
-            surface.Padding = new Thickness(19, 13, 19, 13);
+            var surface = View.DialogSurface(new Thickness(19, 13, 19, 13));
             var stack = new DockPanel();
-            var heading = View.Text(title, 18, View.Ink);
-            heading.FontWeight = FontWeights.SemiBold;
-            heading.Margin = new Thickness(0, 0, 0, 12);
+            var heading = View.DialogHeading(window, title);
             DockPanel.SetDock(heading, Dock.Top);
             stack.Children.Add(heading);
             if (batch)
@@ -367,7 +362,7 @@ namespace DesktopFolders
                 Text = existing, MaxLength = batch ? 2048 : 36, Height = batch ? 124 : 34,
                 FontSize = 14, FontFamily = View.Font, AcceptsReturn = batch,
                 VerticalScrollBarVisibility = batch ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden,
-                Padding = new Thickness(7, 4, 7, 3), BorderBrush = View.Accent
+                Padding = new Thickness(8, 4, 8, 3)
             };
             System.Windows.Automation.AutomationProperties.SetName(input, "文件夹名称");
             DockPanel.SetDock(input, Dock.Top);
@@ -385,8 +380,9 @@ namespace DesktopFolders
             {
                 if (valid())
                     window.DialogResult = true;
-            });
+            }, primary: true);
             cancel.IsCancel = true;
+            accept.Margin = new Thickness(6, 0, 0, 0);
             accept.IsDefault = true;
             accept.IsEnabled = valid();
             cancel.Width = accept.Width = 68;
@@ -758,13 +754,7 @@ namespace DesktopFolders
         {
             bool wasOpen = DialogOpen;
             DialogOpen = true;
-            try
-            {
-                if (panel != null)
-                    MessageBox.Show(panel.Window, text, Program.DisplayName, MessageBoxButton.OK, MessageBoxImage.Information);
-                else
-                    MessageBox.Show(text, Program.DisplayName, MessageBoxButton.OK, MessageBoxImage.Information);
-            }
+            try { View.ShowNotice(Program.DisplayName, text, panel == null ? layoutWindow : panel.Window); }
             finally { DialogOpen = wasOpen; }
         }
 

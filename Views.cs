@@ -14,18 +14,17 @@ using System.Windows.Threading;
 
 namespace DesktopFolders
 {
-    internal static class View
+    internal static partial class View
     {
-        public static readonly Brush Ink = ColorBrush("#192942");
-        public static readonly Brush Secondary = ColorBrush("#52647E");
-        public static readonly Brush Paper = ColorBrush("#F7F9FE");
-        public static readonly Brush Edge = ColorBrush("#D6E3F7");
-        public static readonly Brush Tint = ColorBrush("#DFEBFF");
-        public static readonly Brush Accent = ColorBrush("#3B70BA");
-        public static readonly Brush TileFill = ColorBrush("#11181818");
-        public static readonly Brush TileBorder = ColorBrush("#66FFFFFF");
+        public static readonly Brush Ink = (Brush)Theme["Ink"];
+        public static readonly Brush Secondary = (Brush)Theme["Secondary"];
+        public static readonly Brush Paper = (Brush)Theme["Paper"];
+        public static readonly Brush Edge = (Brush)Theme["Edge"];
+        public static readonly Brush Tint = (Brush)Theme["Tint"];
+        public static readonly Brush Accent = (Brush)Theme["Accent"];
+        public static readonly Brush TileFill = ColorBrush("#121B2430");
+        public static readonly Brush TileBorder = ColorBrush("#58FFFFFF");
         public static readonly FontFamily Font = new FontFamily("Microsoft YaHei UI, Segoe UI");
-        private static readonly Style ButtonStyle = MakeButtonStyle();
 
         public static Brush ColorBrush(string value)
         {
@@ -43,9 +42,12 @@ namespace DesktopFolders
             };
         }
 
-        public static Button Button(object content, string label, Action click)
+        public static Button Button(object content, string label, Action click, bool primary = false)
         {
-            var button = new Button { Content = content, Style = ButtonStyle, ToolTip = label, Foreground = Ink, FontFamily = Font };
+            var button = new Button
+            {
+                Content = content, Style = (Style)Theme[primary ? "PrimaryButton" : "SoftButton"], ToolTip = label, FontFamily = Font
+            };
             AutomationProperties.SetName(button, label);
             if (click != null)
                 button.Click += (sender, e) => click();
@@ -54,20 +56,22 @@ namespace DesktopFolders
 
         public static MenuItem Menu(string name, Action action)
         {
-            var menu = new MenuItem { Header = name, FontFamily = Font };
+            var menu = new MenuItem { Header = name, FontFamily = Font, Style = (Style)Theme["SoftMenuItem"] };
             menu.Click += (sender, e) => menu.Dispatcher.BeginInvoke(DispatcherPriority.Background, action);
             return menu;
         }
 
         public static Window Overlay(string title, double width, double height)
         {
-            return new Window
+            var window = new Window
             {
                 Title = title, Width = width, Height = height, FontFamily = Font,
                 WindowStyle = WindowStyle.None, WindowStartupLocation = WindowStartupLocation.Manual,
                 ResizeMode = ResizeMode.NoResize, AllowsTransparency = true,
                 Background = Brushes.Transparent, ShowInTaskbar = false
             };
+            window.Resources.MergedDictionaries.Add(Theme);
+            return window;
         }
 
         public static Border Rounded(Brush fill, double radius)
@@ -89,28 +93,6 @@ namespace DesktopFolders
             return card;
         }
 
-        private static Style MakeButtonStyle()
-        {
-            var border = new FrameworkElementFactory(typeof(Border), "ButtonSurface");
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
-            border.SetValue(Border.BorderThicknessProperty, new Thickness(1));
-            border.SetValue(Border.BackgroundProperty, Brushes.Transparent);
-            var content = new FrameworkElementFactory(typeof(ContentPresenter));
-            content.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            content.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-            border.AppendChild(content);
-            var template = new ControlTemplate(typeof(Button)) { VisualTree = border };
-            var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-            hover.Setters.Add(new Setter(Border.BackgroundProperty, ColorBrush("#4CA0C0F1"), "ButtonSurface"));
-            var focus = new Trigger { Property = UIElement.IsKeyboardFocusedProperty, Value = true };
-            focus.Setters.Add(new Setter(Border.BorderBrushProperty, Accent, "ButtonSurface"));
-            template.Triggers.Add(hover);
-            template.Triggers.Add(focus);
-            var style = new Style(typeof(Button));
-            style.Setters.Add(new Setter(Control.TemplateProperty, template));
-            style.Setters.Add(new Setter(FrameworkElement.CursorProperty, Cursors.Hand));
-            return style;
-        }
     }
 
     internal sealed class FolderTile
@@ -146,11 +128,11 @@ namespace DesktopFolders
             Window.ShowActivated = false;
             root = new Grid { Background = Brushes.Transparent, AllowDrop = true, Cursor = Cursors.Hand };
             stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
-            badge = View.Rounded(View.TileFill, 14);
+            badge = View.Rounded(View.TileFill, 16);
             badge.Width = badge.Height = 56;
             badge.BorderBrush = View.TileBorder;
             badge.BorderThickness = new Thickness(1);
-            badge.Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 8, Opacity = .16, ShadowDepth = 2 };
+            badge.Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 10, Opacity = .12, ShadowDepth = 2 };
             stack.Children.Add(badge);
             name = View.Text(folder.Name, 12, Brushes.White);
             name.MaxWidth = Width - 3;
@@ -177,10 +159,10 @@ namespace DesktopFolders
                 if (!root.IsMouseOver && !root.ContextMenu.IsOpen && !pressed)
                     Reveal(false);
             };
-            root.ContextMenu = new ContextMenu();
+            root.ContextMenu = View.MenuSurface();
             root.ContextMenu.Items.Add(View.Menu("打开文件夹", () => launcher.Toggle(this)));
             root.ContextMenu.Items.Add(View.Menu("重命名…", () => launcher.Rename(this)));
-            root.ContextMenu.Items.Add(new Separator());
+            root.ContextMenu.Items.Add(View.MenuSeparator());
             root.ContextMenu.Items.Add(View.Menu("新建文件夹…", launcher.NewFolder));
             root.ContextMenu.Items.Add(View.Menu("展开背景…", () => launcher.OpenFolderBackground(Folder)));
             root.ContextMenu.Items.Add(View.Menu("设置…", launcher.OpenSettings));
@@ -419,10 +401,10 @@ namespace DesktopFolders
             this.launcher = launcher;
             Tile = tile;
             Window = View.Overlay(tile.Folder.Name + " · " + Program.DisplayName, 396, 170);
-            var background = View.Rounded(Brushes.Transparent, 15);
+            var background = View.Rounded(Brushes.Transparent, 16);
             background.Margin = new Thickness(7);
             background.BorderThickness = new Thickness(1);
-            surface.Layer.Effect = new DropShadowEffect { Color = Color.FromRgb(25, 41, 66), Opacity = .30, BlurRadius = 15, ShadowDepth = 3 };
+            surface.Layer.Effect = new DropShadowEffect { Color = Color.FromRgb(36, 50, 71), Opacity = .19, BlurRadius = 19, ShadowDepth = 2 };
             var layout = new DockPanel { Margin = new Thickness(15, 11, 15, 13), AllowDrop = true, Background = Brushes.Transparent };
             var layers = new Grid();
             layers.Children.Add(surface.Layer);
@@ -537,7 +519,7 @@ namespace DesktopFolders
             button.ToolTip = entry.Name + " · 双击打开";
             AutomationProperties.SetHelpText(button, "双击打开，拖动排序");
             button.Margin = new Thickness(4, 2, 4, 4);
-            button.ContextMenu = new ContextMenu();
+            button.ContextMenu = View.MenuSurface();
             button.ContextMenu.Items.Add(View.Menu("打开", () => launcher.Launch(entry)));
             button.ContextMenu.Items.Add(View.Menu("移回桌面", () => launcher.Restore(folder, entry)));
             button.ContextMenu.Opened += (s, e) => menuOpen = true;

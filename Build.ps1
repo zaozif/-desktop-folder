@@ -32,9 +32,10 @@ if ($LASTEXITCODE -ne 0) { throw "Native build failed ($LASTEXITCODE)." }
 
 $references = @('WPF\WindowsBase.dll','WPF\PresentationCore.dll','WPF\PresentationFramework.dll',
     'WPF\UIAutomationTypes.dll','System.Xaml.dll','System.Windows.Forms.dll','System.Drawing.dll','Microsoft.CSharp.dll')
+$theme = Join-Path $PSScriptRoot 'ViewTheme.xaml'
 $arguments = @('/nologo', '/target:winexe', '/optimize+', '/utf8output', '/codepage:65001',
     '/main:DesktopFolders.Program', "/out:$Output", ("/win32manifest:" + (Join-Path $PSScriptRoot 'app.manifest')),
-    "/resource:$nativeDll,DesktopFolders.TaskbarTuning.x64.dll")
+    "/resource:$nativeDll,DesktopFolders.TaskbarTuning.x64.dll", "/resource:$theme,DesktopFolders.ViewTheme.xaml")
 $icon = Join-Path $PSScriptRoot 'Folder.ico'
 if (Test-Path -LiteralPath $icon) { $arguments += "/win32icon:$icon" }
 $arguments += $references | ForEach-Object { '/reference:' + (Join-Path $framework $_) }

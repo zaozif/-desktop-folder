@@ -100,18 +100,13 @@ namespace DesktopFolders
             Selection = preferences.ImageCrop;
             Rotation = BackgroundPicture.NormalizeRotation(preferences.ImageRotation);
             window = View.Overlay("裁剪和旋转背景", 594, 456);
-            var body = View.Rounded(View.Paper, 15);
-            body.Margin = new Thickness(5);
-            body.Padding = new Thickness(17, 13, 17, 13);
-            body.BorderThickness = new Thickness(1);
-            body.BorderBrush = View.Edge;
+            var body = View.DialogSurface(new Thickness(17, 13, 17, 13));
             window.Content = body;
             var layout = new DockPanel();
             body.Child = layout;
 
             var heading = new StackPanel { Margin = new Thickness(0, 1, 0, 10) };
-            var title = View.Text("裁剪和旋转背景", 21, View.Ink);
-            title.FontWeight = FontWeights.SemiBold;
+            var title = View.DialogHeading(window, "裁剪和旋转背景", 0);
             heading.Children.Add(title);
             var note = View.Text("拖出选区或拉动四角。按住 Shift 可在选区内重新框选。", 13, View.Secondary);
             note.Margin = new Thickness(0, 4, 0, 0);
@@ -137,7 +132,8 @@ namespace DesktopFolders
 
             var decisions = new StackPanel { Orientation = Orientation.Horizontal };
             var cancel = View.Button("取消", "取消编辑", () => window.DialogResult = false);
-            var apply = View.Button("应用", "应用裁剪和旋转", () => window.DialogResult = true);
+            var apply = View.Button("应用", "应用裁剪和旋转", () => window.DialogResult = true, primary: true);
+            apply.Margin = new Thickness(6, 0, 0, 0);
             cancel.IsCancel = true;
             apply.IsDefault = true;
             foreach (var button in new[] { cancel, apply })
@@ -155,7 +151,7 @@ namespace DesktopFolders
             DockPanel.SetDock(controls, Dock.Bottom);
             layout.Children.Add(controls);
 
-            var preview = View.Rounded(View.ColorBrush("#202C40"), 10);
+            var preview = View.Rounded(View.ColorBrush("#303D4F"), 12);
             preview.Padding = new Thickness(11);
             canvas = new Canvas { Background = Brushes.Transparent, ClipToBounds = true, Cursor = Cursors.Cross };
             preview.Child = canvas;

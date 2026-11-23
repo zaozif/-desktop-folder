@@ -11,23 +11,18 @@ namespace DesktopFolders
             var window = View.Overlay("确认移动文件夹", 514, 307);
             if (owner != null)
                 window.Owner = owner;
-            var body = View.Rounded(View.Paper, 15);
-            body.Margin = new Thickness(5);
-            body.BorderBrush = View.Edge;
-            body.BorderThickness = new Thickness(1);
-            body.Padding = new Thickness(19, 14, 19, 14);
+            var body = View.DialogSurface(new Thickness(19, 14, 19, 14));
             window.Content = body;
             var layout = new DockPanel();
             body.Child = layout;
-            var title = View.Text("确认移动文件夹", 20, View.Ink);
-            title.FontWeight = FontWeights.SemiBold;
-            title.Margin = new Thickness(0, 0, 0, 10);
+            var title = View.DialogHeading(window, "确认移动文件夹", 10);
             DockPanel.SetDock(title, Dock.Top);
             layout.Children.Add(title);
 
             var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             var cancel = View.Button("取消", "取消移动", () => window.DialogResult = false);
-            var move = View.Button("移动并加入", "移动并加入", () => window.DialogResult = true);
+            var move = View.Button("移动并加入", "移动并加入", () => window.DialogResult = true, primary: true);
+            move.Margin = new Thickness(6, 0, 0, 0);
             cancel.IsCancel = true;
             cancel.Width = 68;
             move.Width = 100;
@@ -60,7 +55,7 @@ namespace DesktopFolders
             var text = new TextBox
             {
                 Text = path, IsReadOnly = true, IsTabStop = false, FontFamily = View.Font, FontSize = 13,
-                Foreground = View.Ink, Background = View.ColorBrush("#EEF2F9"), BorderThickness = new Thickness(0),
+                Foreground = View.Ink, Background = View.Tint, BorderThickness = new Thickness(0),
                 Padding = new Thickness(7, 5, 7, 5), TextWrapping = TextWrapping.Wrap,
                 MaxHeight = 55, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 0, 0, 7)
             };

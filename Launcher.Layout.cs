@@ -5,7 +5,6 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
 using Drawing = System.Drawing;
 
@@ -105,23 +104,17 @@ namespace DesktopFolders
             var window = View.Overlay("调整原始布局", 442, 174);
             layoutWindow = window;
             window.Topmost = true;
-            var body = View.Rounded(View.Paper, 15);
-            body.Margin = new Thickness(5);
-            body.Padding = new Thickness(18, 13, 18, 13);
-            body.BorderThickness = new Thickness(1);
-            body.BorderBrush = View.Edge;
+            var body = View.DialogSurface(new Thickness(18, 13, 18, 13));
             window.Content = body;
             var layout = new DockPanel();
             body.Child = layout;
-            var title = View.Text(window.Title, 21, View.Ink);
-            title.FontWeight = FontWeights.SemiBold;
-            title.Background = Brushes.Transparent;
-            title.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) window.DragMove(); };
+            var title = View.DialogHeading(window, window.Title, 0);
             DockPanel.SetDock(title, Dock.Top);
             layout.Children.Add(title);
             var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             var cancel = View.Button("取消", "取消调整布局", () => CompleteLayout(false));
-            var save = View.Button("保存并重新收纳", "保存并重新收纳", () => CompleteLayout(true));
+            var save = View.Button("保存并重新收纳", "保存并重新收纳", () => CompleteLayout(true), primary: true);
+            save.Margin = new Thickness(6, 0, 0, 0);
             cancel.Height = save.Height = 34;
             cancel.Width = 68;
             save.MinWidth = 122;
@@ -201,37 +194,8 @@ namespace DesktopFolders
                 return;
             WithFeedback(() =>
             {
-                var window = View.Overlay("上次退出还原结果", 520, 360);
-                var body = View.Rounded(View.Paper, 15);
-                body.Margin = new Thickness(5);
-                body.Padding = new Thickness(18, 13, 18, 13);
-                body.BorderBrush = View.Edge;
-                body.BorderThickness = new Thickness(1);
-                window.Content = body;
-                var layout = new DockPanel();
-                body.Child = layout;
-                var title = View.Text(window.Title, 21, View.Ink);
-                title.FontWeight = FontWeights.SemiBold;
-                title.Margin = new Thickness(0, 0, 0, 10);
-                DockPanel.SetDock(title, Dock.Top);
-                layout.Children.Add(title);
-                var close = View.Button("关闭", "关闭还原结果", window.Close);
-                close.IsCancel = true;
-                close.HorizontalAlignment = HorizontalAlignment.Right;
-                close.MinWidth = 70;
-                close.Height = 33;
-                DockPanel.SetDock(close, Dock.Bottom);
-                layout.Children.Add(close);
-                layout.Children.Add(new TextBox
-                {
-                    Text = store.ReadExitReport(), IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
-                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Brushes.Transparent,
-                    BorderThickness = new Thickness(0), Foreground = View.Ink
-                });
-                var point = WindowsShell.Cursor;
-                WindowsShell.Place(window, point.X, point.Y, true);
                 DialogOpen = true;
-                try { window.ShowDialog(); }
+                try { View.ShowNotice("上次退出还原结果", store.ReadExitReport()); }
                 finally { DialogOpen = false; }
             });
         }
