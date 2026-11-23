@@ -184,10 +184,15 @@ namespace DesktopFolders
             root.ContextMenu.Items.Add(View.Menu("新建文件夹…", launcher.NewFolder));
             root.ContextMenu.Items.Add(View.Menu("展开背景…", () => launcher.OpenFolderBackground(Folder)));
             root.ContextMenu.Items.Add(View.Menu("设置…", launcher.OpenSettings));
+            var undo = View.Menu("撤销上次收纳", launcher.UndoLastImport);
+            root.ContextMenu.Items.Add(undo);
             var remove = View.Menu("移除空文件夹", () => launcher.Remove(this));
             root.ContextMenu.Items.Add(remove);
             root.ContextMenu.Opened += (s, e) =>
+            {
+                undo.IsEnabled = launcher.CanUndoImport;
                 remove.IsEnabled = Folder.Entries.Count == 0;
+            };
             root.ContextMenu.Closed += (s, e) => ScheduleHide();
             root.MouseEnter += (s, e) =>
             {

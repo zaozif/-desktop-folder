@@ -193,8 +193,9 @@ namespace DesktopFolders
                 String.Equals(directory, publicDesktop, StringComparison.OrdinalIgnoreCase);
         }
 
-        public string Import(Folder folder, string source, Point? position)
+        public string Import(Folder folder, string source, Point? position, out ImportUndo undo)
         {
+            undo = null;
             if (!CanImport(source) || Directory.Exists(source))
                 throw new InvalidOperationException("请选择应用程序或 Windows 快捷方式。");
 
@@ -204,7 +205,10 @@ namespace DesktopFolders
             {
                 entry.OriginalPath = source;
                 if (!folder.Entries.Any(item => String.Equals(item.OriginalPath, source, StringComparison.OrdinalIgnoreCase)))
+                {
                     Edit(() => folder.Entries.Add(entry), () => folder.Entries.Remove(entry));
+                    undo = new ImportUndo(entry, source, position);
+                }
                 return IsOnDesktop(source) ? "已加入「" + entry.Name + "」。桌面上的 EXE 是程序文件，仍保存在原处。" : null;
             }
 
@@ -215,8 +219,15 @@ namespace DesktopFolders
             {
                 if (!onDesktop)
                     return null;
+                var previous = new Entry
+                {
+                    ShortcutSource = equivalent.ShortcutSource, OriginalShortcutPath = equivalent.OriginalShortcutPath,
+                    DesktopPosition = equivalent.DesktopPosition
+                };
                 RecordDesktopOriginal(equivalent, source, position);
-                return TakeOffDesktop(equivalent, source);
+                var message = TakeOffDesktop(equivalent, source);
+                undo = new ImportUndo(equivalent, source, position, restoreShortcut: !File.Exists(source), previous: previous);
+                return message;
             }
 
             entry.ShortcutSource = onDesktop ? "desktop" : "external";
@@ -236,7 +247,9 @@ namespace DesktopFolders
                 throw;
             }
 
-            return onDesktop ? TakeOffDesktop(entry, source) : null;
+            var result = onDesktop ? TakeOffDesktop(entry, source) : null;
+            undo = new ImportUndo(entry, source, position, restoreShortcut: onDesktop && !File.Exists(source));
+            return result;
         }
 
         public FolderImport PlanFolderImport(string source, string storage)
@@ -262,12 +275,12 @@ namespace DesktopFolders
             return new FolderImport(source, destination);
         }
 
-        public void ImportFolder(Folder folder, FolderImport plan, Point? position, Action<string, string> move)
+        public ImportUndo ImportFolder(Folder folder, FolderImport plan, Point? position, Action<string, string> move)
         {
             if (!Directory.Exists(plan.Source))
                 throw new DirectoryNotFoundException("原文件夹已不在确认时的位置。");
             if (folder.Entries.Any(item => String.Equals(item.FolderTarget, plan.Target, StringComparison.OrdinalIgnoreCase)))
-                return;
+                return null;
             var entry = new Entry
             {
                 Id = Guid.NewGuid().ToString("N"),
@@ -290,7 +303,7 @@ namespace DesktopFolders
                 throw;
             }
             if (!plan.MovesOriginal)
-                return;
+                return new ImportUndo(entry, plan.Source, position);
             try
             {
                 if (File.Exists(plan.Target) || Directory.Exists(plan.Target))
@@ -306,11 +319,12 @@ namespace DesktopFolders
                 else if (Directory.Exists(plan.Target))
                 {
                     FinishFolderMove(entry);
-                    return;
+                    return new ImportUndo(entry, plan.Source, position, restoreFolder: true);
                 }
                 throw;
             }
             FinishFolderMove(entry);
+            return new ImportUndo(entry, plan.Source, position, restoreFolder: true);
         }
 
         public void RecoverFolderImports()
@@ -318,9 +332,11 @@ namespace DesktopFolders
             foreach (var folder in Folders)
                 foreach (var entry in folder.Entries.Where(item => item.PendingFolderSource != null).ToArray())
                 {
-                    if (Directory.Exists(entry.PendingFolderSource))
+                    bool original = Directory.Exists(entry.PendingFolderSource);
+                    bool collected = Directory.Exists(entry.FolderTarget);
+                    if (original && !collected)
                         DiscardPendingFolder(folder, entry);
-                    else if (Directory.Exists(entry.FolderTarget))
+                    else if (!original && collected)
                         FinishFolderMove(entry);
                 }
         }
@@ -452,6 +468,81 @@ namespace DesktopFolders
             return destination;
         }
 
+        public string UndoImport(Folder folder, ImportUndo undo, Action<string, string> move)
+        {
+            var entry = undo.Entry;
+            string returnedPath = null;
+            if (undo.RestoreFolder)
+            {
+                UndoFolderMove(entry, undo.Source, move);
+                returnedPath = undo.Source;
+            }
+            else if (undo.RestoreShortcut)
+            {
+                var stored = StoredFile(entry);
+                if (!SameContents(stored, undo.Source))
+                {
+                    if (File.Exists(undo.Source) || Directory.Exists(undo.Source))
+                        throw new IOException("原位置已有同名项目：" + undo.Source);
+                    File.Copy(stored, undo.Source, false);
+                }
+                returnedPath = undo.Source;
+            }
+
+            if (undo.Previous == null)
+            {
+                int index = folder.Entries.IndexOf(entry);
+                Edit(() => folder.Entries.RemoveAt(index), () => folder.Entries.Insert(index, entry));
+                if (entry.OriginalPath == null) CleanStoredFile(StoredFile(entry));
+            }
+            else
+            {
+                var source = entry.ShortcutSource;
+                var path = entry.OriginalShortcutPath;
+                var position = entry.DesktopPosition;
+                Edit(() =>
+                {
+                    entry.ShortcutSource = undo.Previous.ShortcutSource;
+                    entry.OriginalShortcutPath = undo.Previous.OriginalShortcutPath;
+                    entry.DesktopPosition = undo.Previous.DesktopPosition;
+                }, () =>
+                {
+                    entry.ShortcutSource = source;
+                    entry.OriginalShortcutPath = path;
+                    entry.DesktopPosition = position;
+                });
+            }
+            return returnedPath;
+        }
+
+        private void UndoFolderMove(Entry entry, string source, Action<string, string> move)
+        {
+            string target = entry.FolderTarget;
+            if (entry.PendingFolderSource == source && Directory.Exists(source) && !Directory.Exists(target))
+                return;
+            if (File.Exists(source) || Directory.Exists(source))
+                throw new IOException("原位置已有同名项目：" + source);
+            if (!Directory.Exists(target))
+                throw new DirectoryNotFoundException("找不到收纳后的文件夹：" + target);
+
+            var previous = entry.PendingFolderSource;
+            // Startup recovery can finish removing the shortcut if Windows already moved the folder back.
+            Edit(() => entry.PendingFolderSource = source, () => entry.PendingFolderSource = previous);
+            try
+            {
+                move(target, source);
+                if (!Directory.Exists(source) || Directory.Exists(target))
+                    throw new IOException("Windows 没有完成文件夹移动，请检查原位置和收纳位置。\n" + source + "\n" + target);
+            }
+            catch
+            {
+                if (Directory.Exists(source) && !Directory.Exists(target))
+                    return;
+                Edit(() => entry.PendingFolderSource = previous, () => entry.PendingFolderSource = source);
+                throw;
+            }
+        }
+
         private bool FindVisibleIcon(Entry entry)
         {
             if (entry.OriginalPath != null)
@@ -580,6 +671,26 @@ namespace DesktopFolders
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    internal sealed class ImportUndo
+    {
+        public readonly Entry Entry;
+        public readonly string Source;
+        public readonly Point? Position;
+        public readonly bool RestoreShortcut, RestoreFolder;
+        public readonly Entry Previous;
+
+        public ImportUndo(Entry entry, string source, Point? position, bool restoreShortcut = false, bool restoreFolder = false,
+            Entry previous = null)
+        {
+            Entry = entry;
+            Source = source;
+            Position = position;
+            RestoreShortcut = restoreShortcut;
+            RestoreFolder = restoreFolder;
+            Previous = previous;
         }
     }
 

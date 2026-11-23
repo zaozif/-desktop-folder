@@ -189,6 +189,8 @@ namespace DesktopFolders
                 }
                 AddTrayAction(menu, "调整原始布局…", OpenLayoutEditor);
                 AddTrayAction(menu, "查看上次退出还原结果…", ShowLastRestore);
+                AddTrayAction(menu, "撤销上次收纳", UndoLastImport);
+                menu.Items[menu.Items.Count - 1].Enabled = CanUndoImport;
                 AddTrayAction(menu, "设置…", OpenSettings);
             }
             else
@@ -472,6 +474,7 @@ namespace DesktopFolders
             if (editingLayout || exiting)
                 return;
             var messages = new List<string>();
+            var undo = new List<ImportUndo>();
             using (var snapshot = actualDesktop && paths.Any(store.IsDesktopItem) ? DesktopIcons.Open() : null)
             foreach (var path in paths)
             {
@@ -488,23 +491,30 @@ namespace DesktopFolders
                 try
                 {
                     var position = snapshot == null ? null : snapshot.Position(Path.GetFullPath(path));
+                    ImportUndo item;
                     if (Directory.Exists(path))
-                        ImportFolder(folder, path, position);
+                        item = ImportFolder(folder, path, position);
                     else
                     {
-                        var message = store.Import(folder, path, position);
+                        var message = store.Import(folder, path, position, out item);
                         if (message != null)
                             messages.Add(message);
                     }
+                    if (item != null) undo.Add(item);
                 }
                 catch (Exception error) { messages.Add("无法加入「" + Path.GetFileName(path) + "」。" + error.Message); }
+            }
+            if (undo.Count != 0)
+            {
+                lastImport = undo;
+                UpdateTray();
             }
             Refresh(folder);
             if (messages.Count != 0)
                 Notify(String.Join("\n", messages));
         }
 
-        private void ImportFolder(Folder folder, string path, Drawing.Point? position)
+        private ImportUndo ImportFolder(Folder folder, string path, Drawing.Point? position)
         {
             var plan = store.PlanFolderImport(path, folderStorage);
             var owner = panel == null ? null : panel.Window;
@@ -513,16 +523,17 @@ namespace DesktopFolders
             try
             {
                 if (plan.MovesOriginal && !FolderMoveDialog.Confirm(plan, owner))
-                    return;
+                    return null;
                 var tile = tiles.FirstOrDefault(item => item.Folder == folder);
                 var progressOwner = owner ?? (tile == null ? null : tile.Window);
-                store.ImportFolder(folder, plan, position, (source, target) => WindowsShell.MoveDirectory(source, target, progressOwner));
+                return store.ImportFolder(folder, plan, position, (source, target) => WindowsShell.MoveDirectory(source, target, progressOwner));
             }
             catch (OperationCanceledException)
             {
                 if (Directory.Exists(plan.Target))
                     throw new IOException("移动已停止。请检查原位置和目标位置中是否有部分文件。\n" +
                         plan.Source + "\n" + plan.Target);
+                return null;
             }
             catch (IOException error)
             {
@@ -555,6 +566,8 @@ namespace DesktopFolders
             {
                 var path = store.Restore(folder, entry);
                 icons.Remove(entry.Id);
+                lastImport.RemoveAll(item => item.Entry == entry);
+                UpdateTray();
                 Refresh(folder);
                 if (actualDesktop && path != null && entry.DesktopPosition.HasValue)
                     DesktopRestore.Begin(new[] { path }, new Dictionary<string, Drawing.Point> { { path, entry.DesktopPosition.Value } },
