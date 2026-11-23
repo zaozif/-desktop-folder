@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -182,6 +183,14 @@ namespace DesktopFolders
             var title = View.Text(forFolder ? folder.Name + " · 展开背景" : settingsTitle, 21, View.Ink);
             title.FontWeight = FontWeights.SemiBold;
             title.Margin = new Thickness(0, 0, 0, 14);
+            title.Background = Brushes.Transparent;
+            title.MouseLeftButtonDown += (s, e) =>
+            {
+                if (e.ButtonState != MouseButtonState.Pressed)
+                    return;
+                e.Handled = true;
+                window.DragMove();
+            };
             DockPanel.SetDock(title, Dock.Top);
             layout.Children.Add(title);
 
